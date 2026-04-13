@@ -1,13 +1,14 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>L'Oréal | Smart Routine &amp; Product Advisor</title>
     <link
-      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
+    <meta name="theme-color" content="#ff003b" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
@@ -83,6 +84,32 @@
           <a href="#">Contact</a>
         </nav>
       </footer>
+    </div>
+
+    <div id="productModal" class="product-modal" aria-hidden="true" hidden>
+      <div class="product-modal__backdrop" data-modal-close></div>
+      <section
+        class="product-modal__dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="productModalTitle"
+      >
+        <button type="button" class="product-modal__close" data-modal-close>
+          <i class="fa-solid fa-xmark"></i>
+          <span class="visually-hidden">Close product details</span>
+        </button>
+        <div class="product-modal__media">
+          <img id="productModalImage" src="" alt="" />
+        </div>
+        <div class="product-modal__content">
+          <p id="productModalBrand" class="product-modal__brand"></p>
+          <h2 id="productModalTitle"></h2>
+          <p
+            id="productModalDescription"
+            class="product-modal__description"
+          ></p>
+        </div>
+      </section>
     </div>
 
     <!-- secrets.js can be removed when using Cloudflare Workers for API requests -->
