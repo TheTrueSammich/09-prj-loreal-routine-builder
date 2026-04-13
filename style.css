@@ -123,7 +123,14 @@ body::after {
   padding: 18px;
 }
 
-.search-section select {
+.filter-controls {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 12px;
+}
+
+.search-section select,
+.search-section input {
   width: 100%;
   padding: 18px 20px;
   font-size: 1rem;
@@ -144,11 +151,17 @@ body::after {
     transform 180ms ease;
 }
 
-.search-section select:hover {
+.search-section input {
+  font-weight: 500;
+}
+
+.search-section select:hover,
+.search-section input:hover {
   border-color: rgba(255, 0, 59, 0.42);
 }
 
-.search-section select:focus {
+.search-section select:focus,
+.search-section input:focus {
   outline: none;
   border-color: var(--brand-red);
   box-shadow: 0 0 0 4px rgba(255, 0, 59, 0.12);
@@ -736,6 +749,67 @@ body.modal-open {
   overflow: hidden;
 }
 
+/* RTL support: set <html dir="rtl"> to mirror layout and align text naturally. */
+html[dir="rtl"] body,
+html[dir="rtl"] .page-wrapper {
+  direction: rtl;
+}
+
+html[dir="rtl"] .product-card.is-selected::after {
+  left: 16px;
+  right: auto;
+}
+
+html[dir="rtl"] .product-card .product-info,
+html[dir="rtl"] .selected-product-item__details,
+html[dir="rtl"] .chat-message,
+html[dir="rtl"] .chat-form input,
+html[dir="rtl"] .product-modal__content {
+  text-align: right;
+}
+
+html[dir="rtl"] .chat-message--assistant,
+html[dir="rtl"] .chat-message--user {
+  border-right-width: 4px;
+  border-right-style: solid;
+  border-left-width: 1px;
+}
+
+html[dir="rtl"] .chat-message--assistant {
+  border-right-color: var(--brand-red);
+}
+
+html[dir="rtl"] .chat-message--user {
+  margin-right: auto;
+  margin-left: 0;
+  border-right-color: var(--brand-gold);
+}
+
+html[dir="rtl"] .selected-products-actions {
+  justify-content: flex-start;
+}
+
+html[dir="rtl"] .generate-btn i {
+  margin-left: 8px;
+  margin-right: 0;
+}
+
+html[dir="rtl"] .site-footer a::after {
+  right: 0;
+  left: auto;
+  transform-origin: right;
+}
+
+html[dir="rtl"] .product-modal__close {
+  left: 16px;
+  right: auto;
+}
+
+html[dir="rtl"] .product-modal__content {
+  padding-left: 20px;
+  padding-right: 0;
+}
+
 @media (max-width: 960px) {
   .products-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -769,6 +843,10 @@ body.modal-open {
     padding: 18px;
   }
 
+  .filter-controls {
+    grid-template-columns: 1fr;
+  }
+
   .products-grid {
     grid-template-columns: 1fr;
   }
@@ -797,5 +875,9 @@ body.modal-open {
 
   .product-modal__content {
     padding-right: 0;
+  }
+
+  html[dir="rtl"] .product-modal__content {
+    padding-left: 0;
   }
 }

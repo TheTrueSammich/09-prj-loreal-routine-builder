@@ -1,5 +1,6 @@
 /* Get references to DOM elements */
 const categoryFilter = document.getElementById("categoryFilter");
+const productSearch = document.getElementById("productSearch");
 const productsContainer = document.getElementById("productsContainer");
 const selectedProductsList = document.getElementById("selectedProductsList");
 const chatForm = document.getElementById("chatForm");
@@ -21,6 +22,8 @@ const conversationHistory = [];
 let latestRoutine = "";
 const OPENAI_API_URL = "https://openai-api-key.charleslee49ers.workers.dev/";
 const SELECTED_PRODUCTS_STORAGE_KEY = "selectedProductIds";
+const WEB_ENABLED_MODEL = "gpt-4o-search-preview";
+const FALLBACK_MODEL = "gpt-4o";
 
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
@@ -103,12 +106,9 @@ function getSelectedProductsForApi() {
   }));
 }
 
-function getAvailableProductsForApi() {
-  return allProducts.map((product) => ({
-    name: product.name,
-    brand: product.brand,
-    category: product.category,
-  }));
+function getAvailableBrandsForApi() {
+  const uniqueBrands = Array.from(new Set(allProducts.map((p) => p.brand)));
+  return uniqueBrands.sort();
 }
 
 function renderChatMessage(role, message) {
@@ -164,6 +164,58 @@ function getOpenAIApiKey() {
   );
 }
 
+function isValidWorkerEndpoint(url) {
+  return /^https:\/\/.+workers\.dev\/?$/i.test(url);
+}
+
+function getAssistantTextFromApiData(data) {
+  if (!data || !Array.isArray(data.choices) || data.choices.length === 0) {
+    return "";
+  }
+
+  const content = data.choices?.[0]?.message?.content;
+
+  if (typeof content === "string") {
+    return content.trim();
+  }
+
+  if (Array.isArray(content)) {
+    const combinedText = content
+      .map((part) => {
+        if (typeof part === "string") {
+          return part;
+        }
+
+        if (part?.type === "text") {
+          return part?.text || "";
+        }
+
+        return "";
+      })
+      .join("\n")
+      .trim();
+
+    return combinedText;
+  }
+
+  return "";
+}
+
+function buildChatRequestPayload(messages, temperature, model, useWebSearch) {
+  const payload = {
+    model,
+    messages,
+    temperature,
+  };
+
+  if (useWebSearch) {
+    // If supported by the worker/backend, this enables live web lookups.
+    payload.web_search_options = {};
+  }
+
+  return payload;
+}
+
 async function generateRoutine() {
   const selectedProductsForApi = getSelectedProductsForApi();
 
@@ -183,7 +235,7 @@ async function generateRoutine() {
     {
       role: "system",
       content:
-        "You are a beauty routine assistant. Create a concise, personalized routine using only the selected products provided by the user. Do not add products that are not in the selected list. Organize the routine into morning, evening, and optional notes if useful. Keep the language clear and beginner-friendly.",
+        "You are a beauty routine assistant focused on L'Oreal portfolio products and routines (including owned brands such as CeraVe, La Roche-Posay, Vichy, Kiehl's, Maybelline, Lancome, Garnier, Kerastase, and SkinCeuticals). Create a concise, personalized routine using only the selected products provided by the user. Do not add products that are not in the selected list. Organize the routine into morning, evening, and optional notes if useful. Keep the language clear and beginner-friendly.",
     },
     {
       role: "user",
@@ -221,6 +273,10 @@ async function generateRoutine() {
 }
 
 async function requestAssistantResponse(messages, apiKey, temperature = 0.6) {
+  if (!isValidWorkerEndpoint(OPENAI_API_URL)) {
+    throw new Error("Invalid Worker endpoint configuration.");
+  }
+
   const headers = {
     "Content-Type": "application/json",
   };
@@ -230,25 +286,75 @@ async function requestAssistantResponse(messages, apiKey, temperature = 0.6) {
     headers.Authorization = `Bearer ${apiKey}`;
   }
 
-  const response = await fetch(OPENAI_API_URL, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model: "gpt-4o",
-      messages,
-      temperature,
-    }),
-  });
+  const attemptConfigs = [
+    {
+      model: WEB_ENABLED_MODEL,
+      useWebSearch: true,
+    },
+    {
+      model: FALLBACK_MODEL,
+      useWebSearch: false,
+    },
+  ];
 
-  const data = await response.json();
+  let lastErrorMessage = "Unable to generate a response right now.";
 
-  if (!response.ok) {
-    const errorMessage =
-      data?.error?.message || "Unable to generate a response right now.";
-    throw new Error(errorMessage);
+  for (const attempt of attemptConfigs) {
+    const response = await fetch(OPENAI_API_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(
+        buildChatRequestPayload(
+          messages,
+          temperature,
+          attempt.model,
+          attempt.useWebSearch,
+        ),
+      ),
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    const isJsonResponse = contentType.includes("application/json");
+
+    let data;
+    let responseText = "";
+
+    if (isJsonResponse) {
+      data = await response.json();
+    } else {
+      responseText = await response.text();
+    }
+
+    if (!response.ok) {
+      lastErrorMessage =
+        data?.error?.message ||
+        responseText ||
+        "Unable to generate a response right now.";
+
+      // If the web-enabled attempt fails, try the plain fallback model.
+      if (attempt.useWebSearch) {
+        continue;
+      }
+
+      throw new Error(lastErrorMessage);
+    }
+
+    const assistantText = getAssistantTextFromApiData(data);
+
+    if (!assistantText) {
+      lastErrorMessage = "Worker returned an invalid response format.";
+
+      if (attempt.useWebSearch) {
+        continue;
+      }
+
+      throw new Error(lastErrorMessage);
+    }
+
+    return assistantText;
   }
 
-  return data?.choices?.[0]?.message?.content || "";
+  throw new Error(lastErrorMessage);
 }
 
 async function handleFollowUpQuestion(userQuestion) {
@@ -260,14 +366,14 @@ async function handleFollowUpQuestion(userQuestion) {
   }
 
   const apiKey = getOpenAIApiKey();
-  const availableProductsForApi = getAvailableProductsForApi();
+  const knownLorealBrands = getAvailableBrandsForApi();
 
   // We include the selected products and latest generated routine so the
   // assistant can answer follow-ups with consistent context.
   const routineContextMessage = {
     role: "system",
-    content: `Selectable products in this app:\n${JSON.stringify(
-      availableProductsForApi,
+    content: `Known L'Oreal portfolio brands for this app:\n${JSON.stringify(
+      knownLorealBrands,
       null,
       2,
     )}\n\nSelected products:\n${JSON.stringify(
@@ -281,7 +387,7 @@ async function handleFollowUpQuestion(userQuestion) {
     {
       role: "system",
       content:
-        "You are a product advisor for a routine-builder app. Answer follow-up questions using the routine context and prior chat history. Only discuss products that appear in the provided 'Selectable products in this app' list, especially the user's selected products and generated routine. Never recommend, compare, or discuss products that are not in that list. If the user asks about a product outside that list or an unrelated topic, politely refuse and ask them to keep the chat focused on selectable products and their generated routine.",
+        "You are a product advisor for a routine-builder app. Answer follow-up questions using the routine context and prior chat history. You may discuss L'Oreal portfolio products and routines (including owned brands such as CeraVe). Do not recommend, compare, or discuss products outside the L'Oreal portfolio. If the user asks about unrelated topics or non-L'Oreal products, politely refuse and ask them to keep the chat focused on L'Oreal products and routines. Prioritize the user's selected products and generated routine when giving guidance. When current web information is available, include source links or citations at the end under a 'Sources' heading.",
     },
     routineContextMessage,
     ...conversationHistory,
@@ -412,12 +518,22 @@ function closeProductModal() {
   document.body.classList.remove("modal-open");
 }
 
+function doesProductMatchSearch(product, searchTerm) {
+  if (!searchTerm) {
+    return true;
+  }
+
+  const searchableText =
+    `${product.name} ${product.brand} ${product.category} ${product.description}`.toLowerCase();
+  return searchableText.includes(searchTerm);
+}
+
 /* Create HTML for displaying product cards */
 function displayProducts(products) {
   if (products.length === 0) {
     productsContainer.innerHTML = `
       <div class="placeholder-message">
-        No products found for this category.
+        No matching products found. Try another search term or category.
       </div>
     `;
 
@@ -458,20 +574,25 @@ function displayProducts(products) {
 async function renderVisibleProducts() {
   const products = await loadProducts();
   const selectedCategory = categoryFilter.value;
+  const searchTerm = productSearch.value.trim().toLowerCase();
 
-  if (!selectedCategory) {
+  if (!selectedCategory && !searchTerm) {
     productsContainer.innerHTML = `
       <div class="placeholder-message">
-        Select a category to view products
+        Select a category or start typing in search to view products
       </div>
     `;
 
     return;
   }
 
-  const filteredProducts = products.filter(
-    (product) => product.category === selectedCategory,
-  );
+  const filteredProducts = products.filter((product) => {
+    const matchesCategory =
+      !selectedCategory || product.category === selectedCategory;
+    const matchesSearch = doesProductMatchSearch(product, searchTerm);
+
+    return matchesCategory && matchesSearch;
+  });
 
   displayProducts(filteredProducts);
 }
@@ -484,6 +605,10 @@ categoryFilter.addEventListener("change", async (e) => {
   }
 
   await renderVisibleProducts();
+});
+
+productSearch.addEventListener("input", () => {
+  renderVisibleProducts();
 });
 
 productsContainer.addEventListener("click", (event) => {
