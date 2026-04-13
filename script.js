@@ -15,6 +15,7 @@ const productModalDescription = document.getElementById(
 
 let allProducts = [];
 const selectedProducts = new Map();
+const OPENAI_API_URL = "https://openai-api-key.charleslee49ers.workers.dev/";
 
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
@@ -87,11 +88,6 @@ async function generateRoutine() {
 
   const apiKey = getOpenAIApiKey();
 
-  if (!apiKey) {
-    renderChatText("OpenAI API key not found in secrets.js.");
-    return;
-  }
-
   renderLoadingState();
 
   const messages = [
@@ -111,12 +107,18 @@ async function generateRoutine() {
   ];
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const headers = {
+      "Content-Type": "application/json",
+    };
+
+    // Keep optional Authorization support in case the worker expects it.
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+
+    const response = await fetch(OPENAI_API_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model: "gpt-4o",
         messages,
