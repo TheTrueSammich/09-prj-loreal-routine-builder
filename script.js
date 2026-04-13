@@ -16,6 +16,19 @@ const productModalDescription = document.getElementById(
   "productModalDescription",
 );
 
+function applyDocumentDirectionFromLanguage() {
+  const rtlLanguageCodes = ["ar", "fa", "he", "ur"];
+  const currentLanguage = (document.documentElement.lang || "").toLowerCase();
+  const isRtlLanguage = rtlLanguageCodes.some(
+    (code) =>
+      currentLanguage === code || currentLanguage.startsWith(`${code}-`),
+  );
+
+  document.documentElement.setAttribute("dir", isRtlLanguage ? "rtl" : "ltr");
+}
+
+applyDocumentDirectionFromLanguage();
+
 let allProducts = [];
 const selectedProducts = new Map();
 const conversationHistory = [];
@@ -588,7 +601,9 @@ async function renderVisibleProducts() {
 
   const filteredProducts = products.filter((product) => {
     const matchesCategory =
-      !selectedCategory || product.category === selectedCategory;
+      !selectedCategory ||
+      selectedCategory === "all" ||
+      product.category === selectedCategory;
     const matchesSearch = doesProductMatchSearch(product, searchTerm);
 
     return matchesCategory && matchesSearch;

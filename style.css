@@ -762,9 +762,23 @@ html[dir="rtl"] .product-card.is-selected::after {
 
 html[dir="rtl"] .product-card .product-info,
 html[dir="rtl"] .selected-product-item__details,
+html[dir="rtl"] .selected-products h2,
+html[dir="rtl"] .chatbox h2,
 html[dir="rtl"] .chat-message,
 html[dir="rtl"] .chat-form input,
+html[dir="rtl"] .search-section select,
+html[dir="rtl"] .search-section input,
 html[dir="rtl"] .product-modal__content {
+  text-align: right;
+}
+
+html[dir="rtl"] .product-modal__dialog {
+  direction: rtl;
+}
+
+html[dir="rtl"] .product-modal__brand,
+html[dir="rtl"] .product-modal__content h2,
+html[dir="rtl"] .product-modal__description {
   text-align: right;
 }
 
