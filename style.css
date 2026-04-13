@@ -327,6 +327,17 @@ body::after {
   box-shadow: 0 14px 28px rgba(36, 21, 29, 0.08);
 }
 
+.selected-product-item__image {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(36, 21, 29, 0.08);
+  padding: 4px;
+}
+
 .selected-product-item__details {
   flex: 1;
   min-width: 0;
@@ -375,6 +386,34 @@ body::after {
 .selected-product-remove:focus-visible {
   outline: 3px solid rgba(255, 0, 59, 0.2);
   outline-offset: 2px;
+}
+
+.selected-products-actions {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.selected-products-clear {
+  border: none;
+  background: transparent;
+  color: var(--brand-red);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.selected-products-clear:hover {
+  color: #c3002d;
+}
+
+.selected-products-clear:focus-visible {
+  outline: 3px solid rgba(255, 0, 59, 0.2);
+  outline-offset: 2px;
+  border-radius: 8px;
 }
 
 .generate-btn {
@@ -456,6 +495,15 @@ body::after {
   border-left: 4px solid var(--brand-red);
 }
 
+.chat-message--user {
+  margin-left: auto;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  max-width: 90%;
+  border-left: 4px solid var(--brand-gold);
+  background: linear-gradient(180deg, #fffdf8, rgba(255, 248, 234, 0.96));
+}
+
 .placeholder-message {
   width: 100%;
   min-height: 220px;
@@ -520,6 +568,13 @@ body::after {
 .chat-form button:hover {
   transform: translateY(-2px);
   box-shadow: 0 18px 30px rgba(255, 0, 59, 0.3);
+}
+
+.generate-btn:disabled,
+.chat-form button:disabled,
+.chat-form input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .visually-hidden {

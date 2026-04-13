@@ -4,6 +4,8 @@ const productsContainer = document.getElementById("productsContainer");
 const selectedProductsList = document.getElementById("selectedProductsList");
 const chatForm = document.getElementById("chatForm");
 const chatWindow = document.getElementById("chatWindow");
+const userInput = document.getElementById("userInput");
+const sendButton = document.getElementById("sendBtn");
 const generateRoutineButton = document.getElementById("generateRoutine");
 const productModal = document.getElementById("productModal");
 const productModalTitle = document.getElementById("productModalTitle");
@@ -15,7 +17,10 @@ const productModalDescription = document.getElementById(
 
 let allProducts = [];
 const selectedProducts = new Map();
+const conversationHistory = [];
+let latestRoutine = "";
 const OPENAI_API_URL = "https://openai-api-key.charleslee49ers.workers.dev/";
+const SELECTED_PRODUCTS_STORAGE_KEY = "selectedProductIds";
 
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
@@ -41,6 +46,54 @@ function getSelectedProducts() {
   return Array.from(selectedProducts.values());
 }
 
+function saveSelectedProductsToStorage() {
+  const selectedIds = Array.from(selectedProducts.keys());
+  localStorage.setItem(
+    SELECTED_PRODUCTS_STORAGE_KEY,
+    JSON.stringify(selectedIds),
+  );
+}
+
+function getSavedSelectedProductIds() {
+  const rawValue = localStorage.getItem(SELECTED_PRODUCTS_STORAGE_KEY);
+
+  if (!rawValue) {
+    return [];
+  }
+
+  try {
+    const parsedValue = JSON.parse(rawValue);
+
+    if (!Array.isArray(parsedValue)) {
+      return [];
+    }
+
+    return parsedValue
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+  } catch (error) {
+    return [];
+  }
+}
+
+function restoreSelectedProductsFromStorage() {
+  const savedIds = getSavedSelectedProductIds();
+
+  if (savedIds.length === 0) {
+    return;
+  }
+
+  savedIds.forEach((savedId) => {
+    const matchedProduct = allProducts.find(
+      (product) => product.id === savedId,
+    );
+
+    if (matchedProduct) {
+      selectedProducts.set(savedId, matchedProduct);
+    }
+  });
+}
+
 function getSelectedProductsForApi() {
   return getSelectedProducts().map((product) => ({
     name: product.name,
@@ -50,22 +103,55 @@ function getSelectedProductsForApi() {
   }));
 }
 
-function renderChatMessage(html) {
-  chatWindow.innerHTML = "";
-
-  const messageElement = document.createElement("div");
-  messageElement.className = "chat-message chat-message--assistant";
-  messageElement.textContent = html;
-
-  chatWindow.appendChild(messageElement);
+function getAvailableProductsForApi() {
+  return allProducts.map((product) => ({
+    name: product.name,
+    brand: product.brand,
+    category: product.category,
+  }));
 }
 
-function renderChatText(message) {
-  renderChatMessage(message);
+function renderChatMessage(role, message) {
+  const messageElement = document.createElement("div");
+  messageElement.className = `chat-message ${
+    role === "user" ? "chat-message--user" : "chat-message--assistant"
+  }`;
+  messageElement.textContent = message;
+
+  chatWindow.appendChild(messageElement);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+function renderAssistantMessage(message) {
+  renderChatMessage("assistant", message);
+}
+
+function renderUserMessage(message) {
+  renderChatMessage("user", message);
+}
+
+function resetConversationHistory() {
+  conversationHistory.length = 0;
+}
+
+function addMessageToConversation(role, content) {
+  conversationHistory.push({ role, content });
+}
+
+function clearChatWindow() {
+  chatWindow.innerHTML = "";
+}
+
+function setChatControlsDisabled(disabled) {
+  userInput.disabled = disabled;
+  sendButton.disabled = disabled;
+  generateRoutineButton.disabled = disabled;
 }
 
 function renderLoadingState() {
-  renderChatText("Generating your routine from the selected products...");
+  renderAssistantMessage(
+    "Generating your routine from the selected products...",
+  );
 }
 
 function getOpenAIApiKey() {
@@ -82,19 +168,22 @@ async function generateRoutine() {
   const selectedProductsForApi = getSelectedProductsForApi();
 
   if (selectedProductsForApi.length === 0) {
-    renderChatText("Select at least one product before generating a routine.");
+    renderAssistantMessage(
+      "Select at least one product before generating a routine.",
+    );
     return;
   }
 
   const apiKey = getOpenAIApiKey();
 
+  clearChatWindow();
   renderLoadingState();
 
   const messages = [
     {
       role: "system",
       content:
-        "You are a helpful beauty routine assistant. Create a concise, personalized routine using only the selected products provided by the user. Organize the routine into morning, evening, and optional notes if useful. Keep the language clear and beginner-friendly.",
+        "You are a beauty routine assistant. Create a concise, personalized routine using only the selected products provided by the user. Do not add products that are not in the selected list. Organize the routine into morning, evening, and optional notes if useful. Keep the language clear and beginner-friendly.",
     },
     {
       role: "user",
@@ -106,45 +195,122 @@ async function generateRoutine() {
     },
   ];
 
+  setChatControlsDisabled(true);
+
   try {
-    const headers = {
-      "Content-Type": "application/json",
-    };
-
-    // Keep optional Authorization support in case the worker expects it.
-    if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`;
-    }
-
-    const response = await fetch(OPENAI_API_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages,
-        temperature: 0.7,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const errorMessage =
-        data?.error?.message || "Unable to generate the routine right now.";
-      renderChatText(errorMessage);
-      return;
-    }
-
-    const routine = data?.choices?.[0]?.message?.content;
+    const routine = await requestAssistantResponse(messages, apiKey, 0.7);
 
     if (!routine) {
-      renderChatText("No routine was returned by the API.");
+      renderAssistantMessage("No routine was returned by the API.");
       return;
     }
 
-    renderChatText(routine);
+    clearChatWindow();
+    renderAssistantMessage(routine);
+
+    latestRoutine = routine;
+    resetConversationHistory();
+    addMessageToConversation("assistant", routine);
   } catch (error) {
-    renderChatText("Something went wrong while generating the routine.");
+    renderAssistantMessage(
+      "Something went wrong while generating the routine.",
+    );
+  } finally {
+    setChatControlsDisabled(false);
+  }
+}
+
+async function requestAssistantResponse(messages, apiKey, temperature = 0.6) {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+
+  // Keep optional Authorization support in case the worker expects it.
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model: "gpt-4o",
+      messages,
+      temperature,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const errorMessage =
+      data?.error?.message || "Unable to generate a response right now.";
+    throw new Error(errorMessage);
+  }
+
+  return data?.choices?.[0]?.message?.content || "";
+}
+
+async function handleFollowUpQuestion(userQuestion) {
+  if (!latestRoutine) {
+    renderAssistantMessage(
+      "Generate your routine first, then ask follow-up questions in the chat.",
+    );
+    return;
+  }
+
+  const apiKey = getOpenAIApiKey();
+  const availableProductsForApi = getAvailableProductsForApi();
+
+  // We include the selected products and latest generated routine so the
+  // assistant can answer follow-ups with consistent context.
+  const routineContextMessage = {
+    role: "system",
+    content: `Selectable products in this app:\n${JSON.stringify(
+      availableProductsForApi,
+      null,
+      2,
+    )}\n\nSelected products:\n${JSON.stringify(
+      getSelectedProductsForApi(),
+      null,
+      2,
+    )}\n\nCurrent generated routine:\n${latestRoutine}`,
+  };
+
+  const followUpMessages = [
+    {
+      role: "system",
+      content:
+        "You are a product advisor for a routine-builder app. Answer follow-up questions using the routine context and prior chat history. Only discuss products that appear in the provided 'Selectable products in this app' list, especially the user's selected products and generated routine. Never recommend, compare, or discuss products that are not in that list. If the user asks about a product outside that list or an unrelated topic, politely refuse and ask them to keep the chat focused on selectable products and their generated routine.",
+    },
+    routineContextMessage,
+    ...conversationHistory,
+    { role: "user", content: userQuestion },
+  ];
+
+  setChatControlsDisabled(true);
+
+  try {
+    const assistantReply = await requestAssistantResponse(
+      followUpMessages,
+      apiKey,
+      0.6,
+    );
+
+    if (!assistantReply) {
+      renderAssistantMessage("No response was returned by the API.");
+      return;
+    }
+
+    addMessageToConversation("user", userQuestion);
+    addMessageToConversation("assistant", assistantReply);
+    renderAssistantMessage(assistantReply);
+  } catch (error) {
+    renderAssistantMessage(
+      error.message || "Something went wrong while answering your question.",
+    );
+  } finally {
+    setChatControlsDisabled(false);
   }
 }
 
@@ -161,6 +327,14 @@ function toggleProductSelection(productId) {
     selectedProducts.set(productId, product);
   }
 
+  saveSelectedProductsToStorage();
+  renderSelectedProducts();
+  renderVisibleProducts();
+}
+
+function clearAllSelectedProducts() {
+  selectedProducts.clear();
+  saveSelectedProductsToStorage();
   renderSelectedProducts();
   renderVisibleProducts();
 }
@@ -168,10 +342,21 @@ function toggleProductSelection(productId) {
 function renderSelectedProducts() {
   const selectedItems = getSelectedProducts();
 
+  if (selectedItems.length === 0) {
+    selectedProductsList.innerHTML = "";
+    return;
+  }
+
   selectedProductsList.innerHTML = selectedItems
     .map(
       (product) => `
         <div class="selected-product-item" data-product-id="${product.id}">
+          <img
+            class="selected-product-item__image"
+            src="${product.image}"
+            alt="${product.name}"
+            loading="lazy"
+          />
           <div class="selected-product-item__details">
             <span class="selected-product-item__brand">${product.brand}</span>
             <span class="selected-product-item__name">${product.name}</span>
@@ -188,6 +373,17 @@ function renderSelectedProducts() {
       `,
     )
     .join("");
+
+  selectedProductsList.insertAdjacentHTML(
+    "beforeend",
+    `
+      <div class="selected-products-actions">
+        <button type="button" class="selected-products-clear" data-clear-selected>
+          Clear all selected products
+        </button>
+      </div>
+    `,
+  );
 }
 
 function openProductModal(productId) {
@@ -328,6 +524,13 @@ productsContainer.addEventListener("keydown", (event) => {
 });
 
 selectedProductsList.addEventListener("click", (event) => {
+  const clearButton = event.target.closest("[data-clear-selected]");
+
+  if (clearButton) {
+    clearAllSelectedProducts();
+    return;
+  }
+
   const removeButton = event.target.closest(".selected-product-remove");
 
   if (!removeButton) {
@@ -353,11 +556,23 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+loadProducts().then(() => {
+  restoreSelectedProductsFromStorage();
+  renderSelectedProducts();
+});
+
 /* Chat form submission handler - placeholder for OpenAI integration */
-chatForm.addEventListener("submit", (e) => {
+chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  renderChatText(
-    "Use Generate Routine to create a personalized routine from your selected products.",
-  );
+  const question = userInput.value.trim();
+
+  if (!question) {
+    return;
+  }
+
+  renderUserMessage(question);
+  userInput.value = "";
+
+  await handleFollowUpQuestion(question);
 });
