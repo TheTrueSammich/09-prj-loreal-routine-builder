@@ -155,6 +155,18 @@ function clearChatWindow() {
   chatWindow.innerHTML = "";
 }
 
+function renderRoutinePendingPlaceholder() {
+  if (latestRoutine || chatWindow.childElementCount > 0) {
+    return;
+  }
+
+  chatWindow.innerHTML = `
+    <p class="chat-window-placeholder">
+      Your personalized routine will be generated here after you click Generate Routine.
+    </p>
+  `;
+}
+
 function setChatControlsDisabled(disabled) {
   userInput.disabled = disabled;
   sendButton.disabled = disabled;
@@ -700,6 +712,8 @@ loadProducts().then(() => {
   restoreSelectedProductsFromStorage();
   renderSelectedProducts();
 });
+
+renderRoutinePendingPlaceholder();
 
 /* Chat form submission handler - placeholder for OpenAI integration */
 chatForm.addEventListener("submit", async (e) => {

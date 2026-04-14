@@ -493,6 +493,17 @@ body::after {
   border: 1px solid rgba(36, 21, 29, 0.08);
 }
 
+.chat-window-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 214px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.6;
+  padding: 20px;
+}
+
 .chat-message {
   padding: 18px 20px;
   border-radius: 18px;
