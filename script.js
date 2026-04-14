@@ -132,7 +132,12 @@ function renderChatMessage(role, message) {
   messageElement.textContent = message;
 
   chatWindow.appendChild(messageElement);
-  chatWindow.scrollTop = chatWindow.scrollHeight;
+
+  const targetScrollTop = messageElement.offsetTop - chatWindow.offsetTop;
+  chatWindow.scrollTo({
+    top: Math.max(targetScrollTop, 0),
+    behavior: "smooth",
+  });
 }
 
 function renderAssistantMessage(message) {
